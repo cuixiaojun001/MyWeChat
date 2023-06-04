@@ -1,0 +1,3 @@
+[submodule "Server"]
+	path = Server
+	url = https://github.com/SocialistYouth/Chat
