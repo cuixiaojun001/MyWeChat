@@ -9,7 +9,7 @@ public:
     static void insertMD5IntoConfig(QString&& filePath);
     static void insertMD5IntoConfig(QString& filePath, QString& fileMd5);
     static void download(const char* remoteFilePath, int fileSize, const char* fileId, const char* fileMd5, int uid);
-    static void download(QByteArray& byteArray, const char* remoteFilePath, int fileSize, const char* fileId, const char* fileMd5);
+    static void download(QByteArray& byteArray, QString& localFilePath, const char* remoteFilePath, int fileSize, const char* fileId, const char* fileMd5);
     static void upload(QString& remoteFilePath, QString& localFilePath, QString& fileId);
 private:
     /// 用户头像配置文件

@@ -34,7 +34,7 @@ public:
     ~Kernel();
 public:
     static QString& GetName() { return m_username; }
-    static QString& GetIconUrl() { return m_iconUrl; }
+    static QString& GetAvatarUrl() { return m_avatarUrl; }
 public:
     /**
      * @brief 开启服务器
@@ -109,7 +109,7 @@ public slots:
      * @param buf
      * @param nLen
      */
-    void slot_ChatRs(unsigned long lSendIP, const char* buf, int nLen);
+    // void slot_ChatRs(unsigned long lSendIP, const char* buf, int nLen);
     /**
      * @brief slot_AddFriendRq 接收到别人申请添加好友的请求
      * @param lSendIP
@@ -123,15 +123,15 @@ public slots:
      * @param buf
      * @param nLen
      */
-    void slot_AddFriendRs(unsigned long lSendIP, const char* buf, int nLen);
+    // void slot_AddFriendRs(unsigned long lSendIP, const char* buf, int nLen);
 
-    void slot_DealFileInfoRq(unsigned long lSendIP, const char* buf, int nLen);
-
-    void slot_DealFileInfoRs(unsigned long lSendIP, const char* buf, int nLen);
-
-    void slot_DealFileBlockRq(unsigned long lSendIP, const char* buf, int nLen);
-
-    void slot_DealFileBlockRs(unsigned long lSendIP, const char* buf, int nLen);
+    // void slot_DealFileInfoRq(unsigned long lSendIP, const char* buf, int nLen);
+    //
+    // void slot_DealFileInfoRs(unsigned long lSendIP, const char* buf, int nLen);
+    //
+    // void slot_DealFileBlockRq(unsigned long lSendIP, const char* buf, int nLen);
+    //
+    // void slot_DealFileBlockRs(unsigned long lSendIP, const char* buf, int nLen);
 
     void slot_dealGetUserInfoRs(unsigned long lSendIP, const char* buf, int nLen);
 
@@ -150,7 +150,7 @@ public slots:
      * @param filename 文件名，包括路径
      * @param filesize 文件大小
      */
-    void slot_SendFile(int id, QString filename, uint64_t filesize);
+    // void slot_SendFile(int id, QString filename, uint64_t filesize);
     /**
      * @brief slot_GetFriendInfo 点击获取欲添加好友的信息
      * @param friendname
@@ -176,20 +176,20 @@ private:
      * @param path 文件绝对路径
      * @return
      */
-    std::string GetFileName(const char* path);
+    // std::string GetFileName(const char* path);
     /**
      * @brief generateResourceMD5SumMap 将资源文件中的icon做MD5信息摘要
      */
-    void generateResourceMD5SumMap();
+    // void generateResourceMD5SumMap();
 private:
     /// 协议映射表
     std::map<int, std::function<void(unsigned long, const char*, int)> > m_deal_items;
     /// 文件id与文件信息映射表
-    std::map<std::string, FileInfo*> m_mapFileIdToFileInfo;
+    /// std::map<std::string, FileInfo*> m_mapFileIdToFileInfo;
     /// 好友id与好友头像的映射表
-    std::map<int, QPixmap*> m_mapFriendIdToIcon;
+    /// std::map<int, QPixmap*> m_mapFriendIdToIcon;
     /// 资源头像的路径与MD5信息摘要映射
-    QMap<QString, QByteArray> m_mapIconUrlToMd5;
+    /// QMap<QString, QByteArray> m_mapIconUrlToMd5;
     /// 网络中介者
     net::INetMediator* m_pClient;
     /// 登录UI对象指针
@@ -202,15 +202,14 @@ private:
     /// 用户名称
     static QString m_username;
     /// 头像URL
-    static QString m_iconUrl;
+    static QString m_avatarUrl;
+    /// 头像MD5
+    static QString m_avatarMd5;
     /// 用户状态
     int m_state;
     /// 用户个性签名
     QString m_feeling;
-    /// 用于添加好友时显示用户头像
-    QByteArray m_imageArray;
-    /// 添加好友所用头像的数据大小;
-    uint64_t m_imageSize = 0;
+    /// 文件传输系统
     FileUtil* m_fileUtil;
 };
 

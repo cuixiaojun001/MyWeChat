@@ -59,6 +59,18 @@ void MainWindow::setIcon(QString &resPath)
     ui->headBtn->setIconSize(QSize(40, 40));
 }
 
+void MainWindow::setAvatar(QByteArray &byteArray)
+{
+    QPixmap pixmap;
+    pixmap.loadFromData(byteArray);
+    if (pixmap.isNull()) {
+        qDebug() << __func__ << "头像数据错误";
+        return;
+    }
+    ui->headBtn->setIcon(QIcon(pixmap));
+    ui->headBtn->setIconSize(QSize(40, 40));
+}
+
 void MainWindow::init()
 {
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);

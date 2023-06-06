@@ -34,7 +34,7 @@ void ChatRecordDialog::slot_showHistroyMsg(Friend* data) {
                 widget->setMessage(message.getContent());
                 widget->setTime(message.getTime());
             } else if (message.getMsgType() == MsgType::Receive) { // 来自自己的消息
-                auto widget = new HistoryItem(nullptr, Kernel::GetIconUrl(), Kernel::GetName());
+                auto widget = new HistoryItem(nullptr, Kernel::GetAvatarUrl(), Kernel::GetName());
                 ui->chatListWidget->setItemWidget(item, widget);
                 widget->setMessage(message.getContent());
                 widget->setTime(message.getTime());

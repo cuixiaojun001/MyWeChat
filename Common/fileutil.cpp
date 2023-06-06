@@ -129,7 +129,7 @@ void FileUtil::download(const char *remoteFilePath, int fileSize, const char* fi
     m_userIconSetting->setValue(QString("%1/MD5").arg(fileInfo.fileName()), fileMd5);
 }
 
-void FileUtil::download(QByteArray &byteArray, const char *remoteFilePath, int fileSize, const char *fileId, const char *fileMd5)
+void FileUtil::download(QByteArray &byteArray, QString& localAvatarPath, const char *remoteFilePath, int fileSize, const char *fileId, const char *fileMd5)
 {
     // 判断本地是否有该头像
     // 1. 检查某个键是否存在
@@ -140,6 +140,7 @@ void FileUtil::download(QByteArray &byteArray, const char *remoteFilePath, int f
             if (file.open(QIODevice::ReadOnly)) {
                 byteArray = file.readAll();
                 qDebug() << __func__ << "Map中存在该图片 filePath:" << filePath << " byteArray:" << byteArray.size();
+                localAvatarPath = filePath;
                 file.close();
                 return;
             }
@@ -193,6 +194,7 @@ void FileUtil::download(QByteArray &byteArray, const char *remoteFilePath, int f
     closesocket(sock);
     qDebug() << __func__ << "() 下载文件完成, byteArray:" << byteArray.size();
     // 将下载的文件信息存入map和配置文件中
+    localAvatarPath = localFilePath;
     m_mapFileMd5ToPath[fileMd5] = localFilePath;
     m_userIconSetting->setValue(QString("%1/filePath").arg(fileInfo.fileName()), localFilePath);
     m_userIconSetting->setValue(QString("%1/MD5").arg(fileInfo.fileName()), fileMd5);
@@ -215,10 +217,32 @@ void FileUtil::upload(QString& remoteFilePath, QString& localFilePath, QString& 
     std::cout << "connect server[" << inet_ntoa(server_addr.sin_addr) << "] success." << std::endl;
     file::STRU_FILE_CONTENT_RQ rq;
     rq.method = rq.POST;
-    strcpy_s(rq.filePath, remoteFilePath.toStdString().c_str());
+    rq.fileSize = fileInfo.size();
+    strcpy_s(rq.filePath, (remoteFilePath + fileInfo.fileName()).toStdString().c_str());
     strcpy_s(rq.fileId, fileId.toStdString().c_str());
     int packSize = sizeof(rq);
     send(sock, (char*)&packSize, sizeof(int), 0); // 先发包大小
     send(sock, (char*)&rq, sizeof(rq), 0);        // 再发数据包
 
+    // 发送文件块
+    file::STRU_FILE_BLOCK_RQ block;
+//    uint64_t nPos = 0; // 已发送的位置
+    int nReadLen = 0;  // 已读出的字节数
+    QFile file(localFilePath);
+    if (file.open(QIODevice::ReadOnly)) { // 默认二进制打开
+        do {
+            nReadLen = file.read(block.fileContent, _DEF_FILE_CONTENT_SIZE);
+            qDebug() << "发送文件" << fileInfo.fileName() <<" fread() nReadLen:" << nReadLen;
+            block.blockSize = nReadLen;
+            strcpy_s(block.fileId, fileId.toStdString().c_str());
+            int StruSize = sizeof(block);
+            send(sock, (char*)&StruSize, sizeof(int), 0);
+            send(sock, (char*)&block, sizeof(block), 0);
+        } while(nReadLen > 0);
+        file.close();
+    } else {
+        qDebug() << "无法打开文件:" << fileInfo.fileName();
+    }
+    qDebug() << "发送文件" << fileInfo.fileName() << " 完成";
+    closesocket(sock);
 }

@@ -16,6 +16,7 @@ public:
     explicit UserInfoShowDialog(QWidget *parent = nullptr);
     ~UserInfoShowDialog();
     void setUserName(QString username);
+    void setUserAvatar(QByteArray& byteArray);
     void setUserIcon(QPixmap& pixmap);
     void setUserId(int id) { m_userId = id; }
 private slots:

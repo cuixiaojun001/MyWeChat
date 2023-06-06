@@ -1,5 +1,6 @@
 #include "userinfoshowdialog.h"
 #include "ui_userinfoshowdialog.h"
+#include <QDebug>
 
 UserInfoShowDialog::UserInfoShowDialog(QWidget *parent) :
     QDialog(parent),
@@ -25,6 +26,17 @@ UserInfoShowDialog::~UserInfoShowDialog()
 
 void UserInfoShowDialog::setUserName(QString username) {
     ui->label_username->setText(username);
+}
+
+void UserInfoShowDialog::setUserAvatar(QByteArray& byteArray) {
+    QPixmap pixmap;
+    pixmap.loadFromData(byteArray);
+    if (pixmap.isNull()) {
+        qDebug() << "头像数据错误";
+        return;
+    }
+    ui->iconBtn->setIcon(QIcon(pixmap));
+
 }
 
 void UserInfoShowDialog::setUserIcon(QPixmap& pixmap) {

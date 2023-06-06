@@ -8,12 +8,13 @@
 namespace file
 {
 
-#define _DEF_FILE_SERVER_IP ("123.57.187.239")
+#define _DEF_FILE_SERVER_IP ("172.31.255.215")
 #define _DEF_FILE_SERVER_PROT (8088)
 
 enum PackType : uint32_t {
     FILE_CONTENT_RQ = 1000,
-    FILE_CONTENT_RS
+    FILE_CONTENT_RS,
+    FILE_BLOCK_RQ
 };
 
 #ifndef _MAX_FILE_PATH_SIZE
@@ -85,11 +86,15 @@ struct STRU_FILE_CONTENT_RQ {
     char fileId[_FILEID_STR_SIZE];
 };
 
-struct STRU_FILE_CONTENT_RS {
-    /// @brief 数据包类型: _DEF_PROTOCOL_FILE_BLOCK_RQ
+struct STRU_FILE_BLOCK_RQ {
+    STRU_FILE_BLOCK_RQ() : type(FILE_BLOCK_RQ), blockSize(0) {
+        memset(fileId, 0, _FILEID_STR_SIZE);
+        memset(fileContent, 0, _DEF_FILE_CONTENT_SIZE);
+    }
+    /// @brief 数据包类型: FILE_BLOCK_RQ
     PackType type;
     /// @brief 文件唯一id
-    char fileId[_MAX_FILE_PATH_SIZE];
+    char fileId[_FILEID_STR_SIZE];
     /// @brief 文件块内容
     char fileContent[_DEF_FILE_CONTENT_SIZE];
     /// @brief 文件块大小

@@ -101,20 +101,19 @@ void TcpClient::RecvData()
     while (!m_isStop) {
         // 先接受包大小 再接受数据包
         iResult = recv(m_socket, (char*)&nPackSize, sizeof(int), 0);
-        qDebug() << "ip[123.57.187.239] recv 字节数: "<< iResult << " says nPackSize: " << nPackSize;
+        qDebug() << __func__ << "recv "<< iResult << "Bytes, says packSize: " << nPackSize;
         if (iResult <= 0) break;
         int offset = 0; //从buf开始起始偏移多少
         char* recvbuf = new char[nPackSize];
         while (nPackSize > 0) {
-            qDebug() << "剩余" << nPackSize << "未读取";
+            qDebug() << __func__ << " 剩余" << nPackSize << "Bytes未读取";
             if ((iResult = recv(m_socket, recvbuf + offset, nPackSize, 0)) > 0) {
                 // TODO: 处理数据
-                qDebug() << "recv 读取一次, 读了" << iResult << "字节";
+                qDebug() << __func__ << " 读取" << iResult << "Bytes";
                 nPackSize -= iResult;
                 offset += iResult;
             }
         }
-        qDebug() << "ip[123.57.187.239] says: " << recvbuf;
         m_pMediator->DealData(m_socket, recvbuf, offset);
     }
 }

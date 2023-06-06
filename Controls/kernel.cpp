@@ -6,12 +6,13 @@
 #include "Common/fileutil.h"
 
 QString Kernel::m_username;
-QString Kernel::m_iconUrl = ":/images/icon/5.png";
+QString Kernel::m_avatarUrl = ":/images/icon/5.png";
+QString Kernel::m_avatarMd5;
 
 Kernel::Kernel() : m_uuid(0), m_state(0)
 {
     setProtocolMap();               // 初始化协议映射表
-    generateResourceMD5SumMap();    // 初始化资源头像MD5信息摘要
+    // generateResourceMD5SumMap();    // 初始化资源头像MD5信息摘要
     m_fileUtil = new FileUtil;
     m_pClient = new net::TcpClientMediator;
     connect(m_pClient, SIGNAL(SIG_ReadyData(ulong,const char*,int)), this, SLOT(slot_DealData(ulong,const char*,int)));
@@ -63,15 +64,9 @@ void Kernel::setProtocolMap() {
 XX(_DEF_PACK_LOGIN_RS, slot_LoginRs);
 XX(_DEF_PACK_REGISTER_RS, slot_RegisterRs);
 XX(_DEF_PACK_FRIEND_INFO, slot_FriendInfoRs);
-XX(_DEF_PACK_CHAT_RQ, slot_ChatRq);
-XX(_DEF_PACK_CHAT_RS, slot_ChatRs);
 XX(_DEF_PROTOCOL_GETUSERINFO_RS, slot_dealGetUserInfoRs);
-XX(_DEF_PROTOCOL_FILE_INFO_RQ, slot_DealFileInfoRq);
-XX(_DEF_PROTOCOL_FILE_INFO_RS, slot_DealFileInfoRs);
-XX(_DEF_PROTOCOL_FILE_BLOCK_RQ, slot_DealFileBlockRq);
-XX(_DEF_PROTOCOL_FILE_BLOCK_RS, slot_DealFileBlockRs);
 XX(_DEF_PACK_ADDFRIEND_RQ, slot_AddFriendRq);
-XX(_DEF_PACK_ADDFRIEND_RS, slot_AddFriendRs);
+XX(_DEF_PACK_CHAT_RQ, slot_ChatRq);
 XX(UPDATE_AVATAR_RS, slot_dealUpdateAvatarRs);
 #undef XX
 }
@@ -164,20 +159,21 @@ void Kernel::slot_FriendInfoRs(unsigned long lSendIP, const char* buf, int nLen)
     Q_UNUSED(lSendIP);
     Q_UNUSED(nLen);
     STRU_FRIEND_INFO* info = (STRU_FRIEND_INFO*)buf;
-    // qDebug() << __func__ << "info.uuid: " << info->uuid << " m_uuid:" << m_uuid;
     QString username = QString::fromStdString(info->username);
-    // QString feeling = QString::fromStdString(info->feeling);
-
+    QByteArray avatarByteArray;
+    QString avatarPath;
+    FileUtil::download(avatarByteArray, avatarPath, info->avatarInfo.filePath, info->avatarInfo.fileSize, info->avatarInfo.fileId, info->avatarInfo.md5);
     if(m_uuid == info->uuid) { // 该用户信息是自己的
-        // m_mainWnd->slot_setInfo(username, 1, feeling);
         m_username = info->username;
         m_feeling = info->feeling;
         m_state = info->state;
+        m_avatarUrl = avatarPath;
+        m_mainWnd->setAvatar(avatarByteArray);
         return;
     }
     if (!m_mainWnd->getChatListWidget()->isContainsKey(info->uuid)) { // 用户信息是好友的, 且还没添加到map中
         QList<Message> messages1;
-        m_mainWnd->getChatListWidget()->AddItem(new Friend(info->uuid, username, ":/images/icon/2.png", true, "20/11/28", 0, messages1));
+        m_mainWnd->getChatListWidget()->AddItem(new Friend(info->uuid, username, avatarPath, true, "20/11/28", 0, messages1));
     }
 }
 
@@ -192,11 +188,6 @@ void Kernel::slot_ChatRq(unsigned long lSendIP, const char* buf, int nLen) {
     }
 }
 
-void Kernel::slot_ChatRs(unsigned long lSendIP, const char* buf, int nLen) {
-    Q_UNUSED(lSendIP);
-    Q_UNUSED(nLen);
-}
-
 void Kernel::slot_AddFriendRq(unsigned long lSendIP, const char *buf, int nLen)
 {
     // 收到他人的添加好友声请, 在好友列表的RightBar添加好友信息
@@ -207,149 +198,22 @@ void Kernel::slot_AddFriendRq(unsigned long lSendIP, const char *buf, int nLen)
     m_mainWnd->getContactWidget()->setItem(rq->senderId); // rq.senderId是请求添加好友的用户id
     m_mainWnd->getContactWidget()->getItem(rq->senderId)->setId(rq->senderId);
     m_mainWnd->getContactWidget()->getItem(rq->senderId)->setName(QString::fromStdString(rq->senderName));
-}
 
-void Kernel::slot_AddFriendRs(unsigned long lSendIP, const char *buf, int nLen)
-{
-    // 在好友列表显示该好友
-}
-
-void Kernel::slot_DealFileInfoRq(unsigned long lSendIP, const char* buf, int nLen) {
-    Q_UNUSED(lSendIP);
-    Q_UNUSED(nLen);
-    qDebug() << __func__;
-    STRU_FILE_INFO_RQ* rq = (STRU_FILE_INFO_RQ*)buf;
-    STRU_FILE_INFO_RS rs;
-    strcpy_s(rs.szFileId, rq->szFileId); // 文件id的文件名字段应该是现在保存的文件名
-    rs.uuid = m_uuid;
-    rs.friendid = rq->uuid;
-    char text[1024] = "";
-    sprintf(text, "%d发来了%s, 是否接受?", rq->friendid, rq->szFileName);
-    QMessageBox::StandardButton button = QMessageBox::question(m_mainWnd, "好友发来文件", QString::fromStdString(text), QMessageBox::StandardButtons(QMessageBox::Save|QMessageBox::Cancel), QMessageBox::NoButton);
-    if (button == QMessageBox::Save) {
-        QString fileName = QFileDialog::getSaveFileName(m_mainWnd, "选择保存文件路径", ".", tr("文本文件(*.txt);;所有文件 (*.*)"));
-        qDebug() << "getSaveFileName() 选中的文件名:  " << fileName;
-        // 将文件信息存储到map中
-        FileInfo* info = new FileInfo;
-        info->nFileSize = rq->nFileSize;
-        info->nPos = 0;
-        strcpy_s(info->szFileId, rq->szFileId);
-        strcpy_s(info->szFileName, rq->szFileName);
-        strcpy_s(info->szFilePath, fileName.toStdString().c_str());
-        if (fopen_s(&info->pFile, info->szFilePath, "wb") != 0) {
-            qDebug() << "打开文件失败 fopen_s(&info->pFile, info->szFilePath, 'wb')";
-            return;
-        }
-        if (!info->pFile) {
-            qDebug() << "pFile是空指针";
-            return;
-        }
-        if (m_mapFileIdToFileInfo.find(info->szFileId) == m_mapFileIdToFileInfo.end()) {
-            qDebug() << "接收端同意接受文件, 保存文件信息, info->szFileId " << info->szFileId << " info->szFileName: " << info->szFileName << " info->szFilePath:" << info->szFilePath;
-            m_mapFileIdToFileInfo[info->szFileId] = info;
-        }
-        rs.nResult = _file_accept;
-    } else if (button == QMessageBox::Cancel) {
-        rs.nResult = _file_refuse;
-    }
-    m_pClient->SendData(lSendIP, (char*)&rs, sizeof(rs));
-    return;
-}
-void Kernel::slot_DealFileInfoRs(unsigned long lSendIP, const char* buf, int nLen) {
-    Q_UNUSED(lSendIP);
-    Q_UNUSED(nLen);
-    qDebug() << __func__;
-    STRU_FILE_INFO_RS* rs = (STRU_FILE_INFO_RS*)buf;
-    if (rs->nResult == _file_accept) {
-        qDebug() << "好友同意接受";
-        STRU_FILE_BLOCK_RQ rq;
-        uint64_t nPos = 0;
-        int nReadLen = 0;
-        if (m_mapFileIdToFileInfo.find(rs->szFileId) != m_mapFileIdToFileInfo.end()) {
-            qDebug() << "好友同意接受, 接受的文件id为" << rs->szFileId;
-            FileInfo* info = m_mapFileIdToFileInfo[rs->szFileId];
-            while(true) {
-                nReadLen = fread(rq.szFileContent, sizeof(char), _DEF_FILE_CONTENT_SIZE, info->pFile);
-                qDebug() << "发送文件 fread() nReadLen:" << nReadLen;
-                rq.nBlockSize = nReadLen;
-                strcpy_s(rq.szFileId, rs->szFileId);
-                rq.friendid = rs->uuid;
-                rq.uuid = m_uuid;
-                m_pClient->SendData(lSendIP, (char*)&rq, sizeof(rq));
-                nPos += nReadLen;
-                if (nPos >= info->nFileSize || nReadLen < _DEF_FILE_CONTENT_SIZE) {
-                    fclose(info->pFile);
-                    m_mapFileIdToFileInfo.erase(rs->szFileId);
-                    delete info;
-                    info = nullptr;
-                    break;
-                }
-            }
-        }
-    } else {
-        qDebug() << "好友拒绝接受";
-        QMessageBox::about(m_mainWnd, "提示", "对方拒绝接受");
-        // 将文件信息删掉
-        if(m_mapFileIdToFileInfo.find(rs->szFileId) != m_mapFileIdToFileInfo.end()) {
-            FileInfo* info = m_mapFileIdToFileInfo[rs->szFileId];
-            fclose(info->pFile);
-            m_mapFileIdToFileInfo.erase(rs->szFileId);
-            delete info;
-            info = nullptr;
-        }
-    }
-}
-void Kernel::slot_DealFileBlockRq(unsigned long lSendIP, const char* buf, int nLen) {
-    Q_UNUSED(lSendIP);
-    Q_UNUSED(nLen);
-    qDebug() << __func__;
-    STRU_FILE_BLOCK_RQ* rq = (STRU_FILE_BLOCK_RQ*)buf;
-    if(m_mapFileIdToFileInfo.find(rq->szFileId) == m_mapFileIdToFileInfo.end()) {
-        qDebug() << "接收到文件块请求，但没有保存文件信息无法接受";
+    // 显示sender头像
+    QByteArray byteArray;
+    QString avatarPath;
+    FileUtil::download(byteArray, avatarPath, rq->senderAvatarInfo.filePath, rq->senderAvatarInfo.fileSize, rq->senderAvatarInfo.fileId, rq->senderAvatarInfo.md5);
+    QPixmap pixmap;
+    pixmap.loadFromData(byteArray);
+    if (pixmap.isNull()) {
+        qDebug() << "头像数据错误";
         return;
     }
-    FileInfo* info = m_mapFileIdToFileInfo[rq->szFileId];
-    qDebug() << __func__ << "接受到的文件内容是" << rq->szFileContent;
-    qDebug() << "上次同意接受文件保存的文件信息 info->szFileId " << info->szFileId << " info->szFileName: " << info->szFileName << " info->szFilePath:" << info->szFilePath;
-    int nResult = fwrite(rq->szFileContent, sizeof(char), rq->nBlockSize, info->pFile);
-    info->nPos += nResult;
-    qDebug() << "文件现在已经接受的大小为: " << info->nPos;
-    if (info->nPos >= info->nFileSize) {
-        // 已经传输完毕
-        qDebug() << "文件" << info->szFileName << "传输完毕";
-        // 关闭文件指针
-        fclose(info->pFile);
-        // 从map中删掉文件信息
-        m_mapFileIdToFileInfo.erase(rq->szFileId);
-        delete info;
-        info = nullptr;
-        // 发送接受成功回复包
-        STRU_FILE_BLOCK_RS rs;
-        strcpy_s(rs.szFileId, rq->szFileId);
-        rs.nResult = _file_block_recv_success;
-        rs.uuid = m_uuid;
-        rs.friendid = rq->uuid;
-        m_pClient->SendData(lSendIP, (char*)&rs, sizeof(rs));
-        QMessageBox::about(m_mainWnd, "提示", "已经成功接受该文件");
-    }
+    m_mainWnd->getContactWidget()->getItem(rq->senderId)->setIcon(pixmap);
+    m_mainWnd->getContactWidget()->addNewFriend(rq->senderId);
 }
-void Kernel::slot_DealFileBlockRs(unsigned long lSendIP, const char* buf, int nLen) {
-    Q_UNUSED(lSendIP);
-    Q_UNUSED(nLen);
-    STRU_FILE_BLOCK_RS *rs = (STRU_FILE_BLOCK_RS*)buf;
-    if (rs->nResult == _file_block_recv_success) {
-        // 对端已经成功接受
-        if(m_mapFileIdToFileInfo.find(rs->szFileId) != m_mapFileIdToFileInfo.end()) {
-            qDebug() << "!!!!!!!!!!!!!!!!!!!!!!!!!!!这行不应该出现!!!!!!!!!!!!!!";
-            FileInfo* info = m_mapFileIdToFileInfo[rs->szFileId];
-            fclose(info->pFile);
-            m_mapFileIdToFileInfo.erase(rs->szFileId);
-            delete info;
-            info = nullptr;
-        }
-        QMessageBox::about(m_mainWnd, "提示", "对方已经成功接受");
-    }
-}
+
+
 
 void Kernel::slot_dealGetUserInfoRs(unsigned long lSendIP, const char *buf, int nLen)
 {
@@ -370,14 +234,10 @@ void Kernel::slot_dealGetUserInfoRs(unsigned long lSendIP, const char *buf, int 
         m_mainWnd->getUserInfoDialog()->setUserId(rs->userId);
         // download头像
         QByteArray byteArray;
-        FileUtil::download(byteArray, rs->filePath, rs->fileSize, rs->fileId, rs->fileMd5);
-        QPixmap pixmap;
-        pixmap.loadFromData(byteArray);
-        if (pixmap.isNull()) {
-            qDebug() << "头像数据错误";
-            return;
-        }
-        m_mainWnd->getUserInfoDialog()->setUserIcon(pixmap);
+        QString temp;
+        FileUtil::download(byteArray, temp, rs->filePath, rs->fileSize, rs->fileId, rs->fileMd5);
+
+        m_mainWnd->getUserInfoDialog()->setUserAvatar(byteArray);
         QPoint windowPos = m_mainWnd->mapToGlobal(QPoint(0, 0));
         m_mainWnd->getUserInfoDialog()->move(windowPos.x()+305, windowPos.y()+65);
         m_mainWnd->getUserInfoDialog()->show();
@@ -392,11 +252,24 @@ void Kernel::slot_dealUpdateAvatarRs(unsigned long lSendIP, const char *buf, int
     qDebug() << __func__;
     STRU_UPDATE_AVATAR_RS* rs = (STRU_UPDATE_AVATAR_RS*)buf;
     if (rs->result == rs->NOTNEEDUPLOAD) { // 服务器有该头像无需上传
+        qDebug() << __func__ << "服务器有该头像无需上传";
         m_mainWnd->setAvatarId(QString::fromUtf8(rs->avatarId));
     } else if (rs->result == rs->NEEDUPLOAD) { // 需要上传头像
+        qDebug() << __func__ << "需要上传头像";
         QString remotePath = rs->uploadPath;
         QString fileId = rs->avatarId;
-        FileUtil::upload(remotePath, m_iconUrl, fileId);
+        FileUtil::upload(remotePath, m_avatarUrl, fileId);
+        m_mainWnd->setAvatarId(QString::fromUtf8(rs->avatarId));
+        // 告知服务器头像已经上传完成
+        QFileInfo fileInfo(m_avatarUrl);
+        STRU_UPDATE_AVATAR_COMPLETE_NOTIFY notify;
+        notify.senderId = m_uuid;
+        notify.result = notify.UPLOADSUCCESS;
+        notify.fileSize = fileInfo.size();
+        strcpy_s(notify.fileName, fileInfo.fileName().toStdString().c_str());
+        strcpy_s(notify.avatarId, rs->avatarId);
+        strcpy_s(notify.fileMd5, m_avatarMd5.toStdString().c_str());
+        m_pClient->SendData(0, (char*)&notify, sizeof(notify));
     }
 }
 
@@ -407,36 +280,6 @@ void Kernel::slot_SendChatMsg(int id, QString content) {
     std::string strContent = content.toStdString();
     strcpy_s(rq.content,strContent.c_str());
     // qDebug() << __func__ << rq.content;
-    m_pClient->SendData(0, (char*)&rq, sizeof(rq));
-}
-
-void Kernel::slot_SendFile(int id, QString filename, uint64_t filesize) {
-    qDebug() << __func__ << " id: " << id << " filename:" << filename << " filesize:" << filesize;
-    STRU_FILE_INFO_RQ rq;
-    std::string strfilename = GetFileName(filename.toStdString().c_str());
-    strcpy_s(rq.szFileName, strfilename.c_str());
-    std::string strtime = QTime::currentTime().toString("hh_mm_ss_zzz").toStdString();
-    sprintf(rq.szFileId, "%s_%s", strfilename.c_str(), strtime.c_str());
-    rq.uuid = m_uuid;
-    rq.friendid = id;
-    rq.nFileSize = filesize;
-    // 将文件信息存储到FileInfo结构体中
-    FileInfo *info = new FileInfo;
-    info->nPos = 0;
-    info->nFileSize = filesize;
-    strcpy_s(info->szFileId, rq.szFileId);
-    strcpy_s(info->szFileName, strfilename.c_str());
-    strcpy_s(info->szFilePath, filename.toStdString().c_str());
-    if (fopen_s(&info->pFile, info->szFilePath, "rb") != 0) {
-        qDebug() << "主动发送文件端打开文件失败 errno=" << errno << " reason = " << strerror(errno);
-        return;
-    }
-    if (!info->pFile) {
-        qDebug() << "主动发送文件端info->pFile为空";
-    }
-    if (m_mapFileIdToFileInfo.find(info->szFileId) == m_mapFileIdToFileInfo.end()) {
-        m_mapFileIdToFileInfo[info->szFileId] = info;
-    }
     m_pClient->SendData(0, (char*)&rq, sizeof(rq));
 }
 
@@ -456,22 +299,22 @@ void Kernel::slot_addFriendRequest(QString friendname, int friendId)
     strcpy_s(rq.senderName, m_username.toStdString().c_str());
     rq.senderId = m_uuid;
     rq.receiverId = friendId;
+    /// 服务器添加头像信息
     m_pClient->SendData(0, (char*)&rq, sizeof(rq));
 }
 
-void Kernel::slot_FriendReqAccepted(int id)
+void Kernel::slot_FriendReqAccepted(int id) // 发送添加好友回复
 {
-    // 在好友列表显示该好友
-    QList<Message> messages1;
-    if (m_mapFriendIdToIcon.find(id) == m_mapFriendIdToIcon.end()) return;
-    //TODO
-    // m_mainWnd->getChatListWidget()->AddItem(new Friend(id, username, ":/images/icon/2.png", true, "20/11/28", 0, messages1));
+    // TODO 在好友列表显示该好友
+
+    // QList<Message> messages1;
+    //m_mainWnd->getChatListWidget()->AddItem(new Friend(id, username, ":/images/icon/2.png", true, "20/11/28", 0, messages1));
     // 告知好友同意
     STRU_ADD_FRIEND_RS rs;
     rs.receiverId = id;
     rs.senderId = m_uuid;
     strcpy(rs.senderName, m_username.toStdString().c_str());
-    rs.result = add_success;
+    rs.result = rs.ADD_SUCCESS;
     m_pClient->SendData(0, (char*)&rs, sizeof(rs));
 }
 
@@ -507,55 +350,233 @@ void Kernel::slot_ChangeUserIcon()
     QString fileMd5;
     FileUtil::insertMD5IntoConfig(targetFilePath, fileMd5);
     // 4. 修改用户头像
-    m_iconUrl = targetFilePath;
-    m_mainWnd->setIcon(m_iconUrl);
-    qDebug() << __func__ << "m_iconUrl:" << m_iconUrl;
+    m_avatarUrl = targetFilePath;
+    m_mainWnd->setIcon(m_avatarUrl);
+    qDebug() << __func__ << "m_avatarUrl:" << m_avatarUrl;
     // 5. 通知服务器更改用户信息
+    QFileInfo newInfo(targetFilePath);
     STRU_UPDATE_AVATAR_RQ rq;
     rq.senderId = m_uuid;
-    rq.fileSize = fileInfo.size();
-    strcpy_s(rq.fileName, fileInfo.fileName().toStdString().c_str());
+    rq.fileSize = newInfo.size();
+    strcpy_s(rq.fileName, newInfo.fileName().toStdString().c_str());
     strcpy_s(rq.oldAvatarId, m_mainWnd->getAvatarId().toStdString().c_str());
     strcpy_s(rq.fileMd5, fileMd5.toStdString().c_str());
     m_pClient->SendData(0, (char*)&rq, sizeof(rq));
 }
 
-std::string Kernel::GetFileName(const char* path) {
-    int nlen = strlen(path);
-    if (nlen < 1) {
-        return std::string();
-    }
-    for (int i = nlen - 1; i >= 0; i --) {
-        if (path[i] == '\\' || path[i] == '/') {
-            return &path[i+1];
-        }
-    }
-    return std::string();
-}
+//std::string Kernel::GetFileName(const char* path) {
+//    int nlen = strlen(path);
+//    if (nlen < 1) {
+//        return std::string();
+//    }
+//    for (int i = nlen - 1; i >= 0; i --) {
+//        if (path[i] == '\\' || path[i] == '/') {
+//            return &path[i+1];
+//        }
+//    }
+//    return std::string();
+//}
 
-void Kernel::generateResourceMD5SumMap()
-{
-    // 存储到配置文件中
-    QString rootPath = QStringLiteral(":/images/icon/"); // 获取资源文件中的根目录路径
-    QStringList images; // 存储所有图片文件的路径
-    if (QDir(rootPath).exists()) { // 检查是否存在根目录
-        QDirIterator it(rootPath, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            QString path = it.next();
-            if (QFileInfo(path).isFile() && QFileInfo(path).suffix() == "png") {
-                images.append(path);
-            }
-        }
-    }
-    foreach (QString imagePath, images) {
-        QFile file(imagePath);
-        if (file.open(QIODevice::ReadOnly)) {
-            QCryptographicHash hash(QCryptographicHash::Md5);
-            if (hash.addData(&file)) {
-                QByteArray md5Sum(hash.result());
-                m_mapIconUrlToMd5.insert(imagePath, md5Sum.toHex()); // 记录MD5信息摘要
-            }
-            file.close();
-        }
-    }
-}
+//void Kernel::generateResourceMD5SumMap()
+//{
+//    // 存储到配置文件中
+//    QString rootPath = QStringLiteral(":/images/icon/"); // 获取资源文件中的根目录路径
+//    QStringList images; // 存储所有图片文件的路径
+//    if (QDir(rootPath).exists()) { // 检查是否存在根目录
+//        QDirIterator it(rootPath, QDirIterator::Subdirectories);
+//        while (it.hasNext()) {
+//            QString path = it.next();
+//            if (QFileInfo(path).isFile() && QFileInfo(path).suffix() == "png") {
+//                images.append(path);
+//            }
+//        }
+//    }
+//    foreach (QString imagePath, images) {
+//        QFile file(imagePath);
+//        if (file.open(QIODevice::ReadOnly)) {
+//            QCryptographicHash hash(QCryptographicHash::Md5);
+//            if (hash.addData(&file)) {
+//                QByteArray md5Sum(hash.result());
+//                m_mapIconUrlToMd5.insert(imagePath, md5Sum.toHex()); // 记录MD5信息摘要
+//            }
+//            file.close();
+//        }
+//    }
+//}
+
+// void Kernel::slot_AddFriendRs(unsigned long lSendIP, const char *buf, int nLen)
+// {
+//    // 在好友列表显示该好友
+// }
+
+// void Kernel::slot_DealFileInfoRq(unsigned long lSendIP, const char* buf, int nLen) {
+//    Q_UNUSED(lSendIP);
+//    Q_UNUSED(nLen);
+//    qDebug() << __func__;
+//    STRU_FILE_INFO_RQ* rq = (STRU_FILE_INFO_RQ*)buf;
+//    STRU_FILE_INFO_RS rs;
+//    strcpy_s(rs.szFileId, rq->szFileId); // 文件id的文件名字段应该是现在保存的文件名
+//    rs.uuid = m_uuid;
+//    rs.friendid = rq->uuid;
+//    char text[1024] = "";
+//    sprintf(text, "%d发来了%s, 是否接受?", rq->friendid, rq->szFileName);
+//    QMessageBox::StandardButton button = QMessageBox::question(m_mainWnd, "好友发来文件", QString::fromStdString(text), QMessageBox::StandardButtons(QMessageBox::Save|QMessageBox::Cancel), QMessageBox::NoButton);
+//    if (button == QMessageBox::Save) {
+//        QString fileName = QFileDialog::getSaveFileName(m_mainWnd, "选择保存文件路径", ".", tr("文本文件(*.txt);;所有文件 (*.*)"));
+//        qDebug() << "getSaveFileName() 选中的文件名:  " << fileName;
+//        // 将文件信息存储到map中
+//        FileInfo* info = new FileInfo;
+//        info->fileSize = rq->nFileSize;
+//        info->nPos = 0;
+//        strcpy_s(info->szFileId, rq->szFileId);
+//        strcpy_s(info->szFileName, rq->szFileName);
+//        strcpy_s(info->szFilePath, fileName.toStdString().c_str());
+//        if (fopen_s(&info->pFile, info->szFilePath, "wb") != 0) {
+//            qDebug() << "打开文件失败 fopen_s(&info->pFile, info->szFilePath, 'wb')";
+//            return;
+//        }
+//        if (!info->pFile) {
+//            qDebug() << "pFile是空指针";
+//            return;
+//        }
+//        if (m_mapFileIdToFileInfo.find(info->szFileId) == m_mapFileIdToFileInfo.end()) {
+//            qDebug() << "接收端同意接受文件, 保存文件信息, info->szFileId " << info->szFileId << " info->szFileName: " << info->szFileName << " info->szFilePath:" << info->szFilePath;
+//            m_mapFileIdToFileInfo[info->szFileId] = info;
+//        }
+//        rs.nResult = _file_accept;
+//    } else if (button == QMessageBox::Cancel) {
+//        rs.nResult = _file_refuse;
+//    }
+//    m_pClient->SendData(lSendIP, (char*)&rs, sizeof(rs));
+//    return;
+// }
+// void Kernel::slot_DealFileInfoRs(unsigned long lSendIP, const char* buf, int nLen) {
+//    Q_UNUSED(lSendIP);
+//    Q_UNUSED(nLen);
+//    qDebug() << __func__;
+//    STRU_FILE_INFO_RS* rs = (STRU_FILE_INFO_RS*)buf;
+//    if (rs->nResult == _file_accept) {
+//        qDebug() << "好友同意接受";
+//        STRU_FILE_BLOCK_RQ rq;
+//        uint64_t nPos = 0;
+//        int nReadLen = 0;
+//        if (m_mapFileIdToFileInfo.find(rs->szFileId) != m_mapFileIdToFileInfo.end()) {
+//            qDebug() << "好友同意接受, 接受的文件id为" << rs->szFileId;
+//            FileInfo* info = m_mapFileIdToFileInfo[rs->szFileId];
+//            while(true) {
+//                nReadLen = fread(rq.szFileContent, sizeof(char), _DEF_FILE_CONTENT_SIZE, info->pFile);
+//                qDebug() << "发送文件 fread() nReadLen:" << nReadLen;
+//                rq.nBlockSize = nReadLen;
+//                strcpy_s(rq.szFileId, rs->szFileId);
+//                rq.friendid = rs->uuid;
+//                rq.uuid = m_uuid;
+//                m_pClient->SendData(lSendIP, (char*)&rq, sizeof(rq));
+//                nPos += nReadLen;
+//                if (nPos >= info->nFileSize || nReadLen < _DEF_FILE_CONTENT_SIZE) {
+//                    fclose(info->pFile);
+//                    m_mapFileIdToFileInfo.erase(rs->szFileId);
+//                    delete info;
+//                    info = nullptr;
+//                    break;
+//                }
+//            }
+//        }
+//    } else {
+//        qDebug() << "好友拒绝接受";
+//        QMessageBox::about(m_mainWnd, "提示", "对方拒绝接受");
+//        // 将文件信息删掉
+//        if(m_mapFileIdToFileInfo.find(rs->szFileId) != m_mapFileIdToFileInfo.end()) {
+//            FileInfo* info = m_mapFileIdToFileInfo[rs->szFileId];
+//            fclose(info->pFile);
+//            m_mapFileIdToFileInfo.erase(rs->szFileId);
+//            delete info;
+//            info = nullptr;
+//        }
+//    }
+// }
+// void Kernel::slot_DealFileBlockRq(unsigned long lSendIP, const char* buf, int nLen) {
+//    Q_UNUSED(lSendIP);
+//    Q_UNUSED(nLen);
+//    qDebug() << __func__;
+//    STRU_FILE_BLOCK_RQ* rq = (STRU_FILE_BLOCK_RQ*)buf;
+//    if(m_mapFileIdToFileInfo.find(rq->szFileId) == m_mapFileIdToFileInfo.end()) {
+//        qDebug() << "接收到文件块请求，但没有保存文件信息无法接受";
+//        return;
+//    }
+//    FileInfo* info = m_mapFileIdToFileInfo[rq->szFileId];
+//    qDebug() << __func__ << "接受到的文件内容是" << rq->szFileContent;
+//    qDebug() << "上次同意接受文件保存的文件信息 info->szFileId " << info->szFileId << " info->szFileName: " << info->szFileName << " info->szFilePath:" << info->szFilePath;
+//    int nResult = fwrite(rq->szFileContent, sizeof(char), rq->nBlockSize, info->pFile);
+//    info->nPos += nResult;
+//    qDebug() << "文件现在已经接受的大小为: " << info->nPos;
+//    if (info->nPos >= info->nFileSize) {
+//        // 已经传输完毕
+//        qDebug() << "文件" << info->szFileName << "传输完毕";
+//        // 关闭文件指针
+//        fclose(info->pFile);
+//        // 从map中删掉文件信息
+//        m_mapFileIdToFileInfo.erase(rq->szFileId);
+//        delete info;
+//        info = nullptr;
+//        // 发送接受成功回复包
+//        STRU_FILE_BLOCK_RS rs;
+//        strcpy_s(rs.szFileId, rq->szFileId);
+//        rs.nResult = _file_block_recv_success;
+//        rs.uuid = m_uuid;
+//        rs.friendid = rq->uuid;
+//        m_pClient->SendData(lSendIP, (char*)&rs, sizeof(rs));
+//        QMessageBox::about(m_mainWnd, "提示", "已经成功接受该文件");
+//    }
+// }
+// void Kernel::slot_DealFileBlockRs(unsigned long lSendIP, const char* buf, int nLen) {
+//    Q_UNUSED(lSendIP);
+//    Q_UNUSED(nLen);
+//    STRU_FILE_BLOCK_RS *rs = (STRU_FILE_BLOCK_RS*)buf;
+//    if (rs->nResult == _file_block_recv_success) {
+//        // 对端已经成功接受
+//        if(m_mapFileIdToFileInfo.find(rs->szFileId) != m_mapFileIdToFileInfo.end()) {
+//            qDebug() << "!!!!!!!!!!!!!!!!!!!!!!!!!!!这行不应该出现!!!!!!!!!!!!!!";
+//            FileInfo* info = m_mapFileIdToFileInfo[rs->szFileId];
+//            fclose(info->pFile);
+//            m_mapFileIdToFileInfo.erase(rs->szFileId);
+//            delete info;
+//            info = nullptr;
+//        }
+//        QMessageBox::about(m_mainWnd, "提示", "对方已经成功接受");
+//    }
+// }
+
+// void Kernel::slot_SendFile(int id, QString filename, uint64_t filesize) {
+//    qDebug() << __func__ << " id: " << id << " filename:" << filename << " filesize:" << filesize;
+//    STRU_FILE_INFO_RQ rq;
+//    std::string strfilename = GetFileName(filename.toStdString().c_str());
+//    strcpy_s(rq.szFileName, strfilename.c_str());
+//    std::string strtime = QTime::currentTime().toString("hh_mm_ss_zzz").toStdString();
+//    sprintf(rq.szFileId, "%s_%s", strfilename.c_str(), strtime.c_str());
+//    rq.uuid = m_uuid;
+//    rq.friendid = id;
+//    rq.nFileSize = filesize;
+//    // 将文件信息存储到FileInfo结构体中
+//    FileInfo *info = new FileInfo;
+//    info->nPos = 0;
+//    info->nFileSize = filesize;
+//    strcpy_s(info->szFileId, rq.szFileId);
+//    strcpy_s(info->szFileName, strfilename.c_str());
+//    strcpy_s(info->szFilePath, filename.toStdString().c_str());
+//    if (fopen_s(&info->pFile, info->szFilePath, "rb") != 0) {
+//        qDebug() << "主动发送文件端打开文件失败 errno=" << errno << " reason = " << strerror(errno);
+//        return;
+//    }
+//    if (!info->pFile) {
+//        qDebug() << "主动发送文件端info->pFile为空";
+//    }
+//    if (m_mapFileIdToFileInfo.find(info->szFileId) == m_mapFileIdToFileInfo.end()) {
+//        m_mapFileIdToFileInfo[info->szFileId] = info;
+//    }
+//    m_pClient->SendData(0, (char*)&rq, sizeof(rq));
+// }
+
+//void Kernel::slot_ChatRs(unsigned long lSendIP, const char* buf, int nLen) {
+//    Q_UNUSED(lSendIP);
+//    Q_UNUSED(nLen);
+//}

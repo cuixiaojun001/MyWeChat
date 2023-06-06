@@ -56,6 +56,7 @@ public:
     void setAvatarId(const QString& id) { m_avatarId = id;}
 public:
     void setIcon(QString& resPath);
+    void setAvatar(QByteArray& byteArray);
 public slots:
     void onChatMessageReceived(int id, QString message);
     void onChatFileReceived(int friendid, QString filename, uint64_t filesize);

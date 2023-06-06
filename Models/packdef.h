@@ -5,7 +5,7 @@
 #include <string>
 
 #define _DEF_TCP_PORT (8080)
-#define _DEF_SERVER_IP ("123.57.187.239")
+#define _DEF_SERVER_IP ("172.31.255.215")
 
 #define _MAX_SIZE	(40)
 #define _DEF_CONTENT_SIZE (1024)
@@ -46,7 +46,8 @@ enum PackType {
     FILE_INFO_RQ = 110,
     FILE_INFO_RS = 111,
     UPDATE_AVATAR_RQ = 117,
-    UPDATE_AVATAR_RS = 118
+    UPDATE_AVATAR_RS = 118,
+    UPDATE_AVATAR_COMPLETE_NOTIFY = 119
 };
 
 // 最大文件路径长度
@@ -75,6 +76,28 @@ enum PackType {
 
 //协议结构
 
+/**
+ * @brief 文件信息
+*/
+struct FileInfo {
+    FileInfo()
+        : fileSize(0) {
+        memset(fileId, 0, _MAX_FILE_PATH_SIZE);
+        memset(fileName, 0, _MAX_FILE_PATH_SIZE);
+        memset(filePath, 0, _MAX_FILE_PATH_SIZE);
+        memset(md5, 0, _MD5_STR_SIZE);
+    }
+    /// @brief 文件唯一id
+    char fileId[_MAX_FILE_PATH_SIZE];
+    /// @brief 文件名
+    char fileName[_MAX_FILE_PATH_SIZE];
+    /// @brief 文件所在路径
+    char filePath[_MAX_FILE_PATH_SIZE];
+    /// @brief 文件MD5值
+    char md5[_MD5_STR_SIZE];
+    /// @brief 文件大小
+    uint64_t fileSize;
+};
 
 /**
  * @brief 注册请求块
@@ -190,7 +213,7 @@ typedef struct STRU_LOGIN_RS
 typedef struct STRU_FRIEND_INFO
 {
     typedef int PackType;
-    STRU_FRIEND_INFO() :type(_DEF_PACK_FRIEND_INFO), uuid(0), iconid(0), state(0)
+    STRU_FRIEND_INFO() :type(_DEF_PACK_FRIEND_INFO), uuid(0), state(0)
     {
         memset(username, 0, sizeof(username));
         memset(feeling, 0, sizeof(feeling));
@@ -200,73 +223,58 @@ typedef struct STRU_FRIEND_INFO
      * @brief 数据包类型：_DEF_PACK_FRIEND_INFO
     */
     PackType type;
-    /**
-     * @brief 用户唯一id
-    */
+    /// @brief 用户唯一id
     int uuid;
-    /**
-     * @brief 头像id
-    */
-    int iconid;
-    /**
-     * @brief 用户状态(在线|离线)
-    */
+    /// @brief 头像信息
+    FileInfo avatarInfo;
+    /// @brief 用户状态(在线|离线)
     int state;
-    /**
-     * @brief 用户名
-    */
+    /// @brief 用户名
     char username[_MAX_SIZE];
-    /**
-     * @brief 个性签名
-    */
+    /// @brief 个性签名
     char feeling[_MAX_SIZE];
-
 }STRU_FRIEND_INFO;
 
 
 /**
  * @brief 添加好友请求块
 */
-typedef struct STRU_ADD_FRIEND_RQ
-{
+typedef struct STRU_ADD_FRIEND_RQ {
     typedef int PackType;
-    // 如果用户1 添加用户2 为好友 需要 用户1 id 用户1 名字 ,用户2的名字
-    STRU_ADD_FRIEND_RQ() :type(_DEF_PACK_ADDFRIEND_RQ), senderId(0), receiverId(0)
-    {
+    STRU_ADD_FRIEND_RQ()
+        : type(_DEF_PACK_ADDFRIEND_RQ)
+        , senderId(0)
+        , receiverId(0) {
         memset(senderName, 0, sizeof(senderName));
         memset(receiverName, 0, sizeof(receiverName));
     }
-    /**
-     * @brief 数据包类型: _DEF_PACK_ADDFRIEND_RQ
-    */
+    /// @brief 数据包类型: _DEF_PACK_ADDFRIEND_RQ
     PackType type;
-    /**
-     * @brief 发送端id
-    */
+    /// @brief 发送端id
     int senderId;
-    /**
-     * @brief 发送端name
-    */
+    /// @brief 发送端name
     char senderName[_MAX_SIZE];
-    /**
-     * @brief 接收端id
-     */
+    /// @brief 接收端id
     int receiverId;
-    /**
-     * @brief 接收端name
-     */
+    /// @brief 接收端name
     char receiverName[_MAX_SIZE];
-
-}STRU_ADD_FRIEND_RQ;
+    /// @brief 发送端头像信息
+    FileInfo senderAvatarInfo;
+} STRU_ADD_FRIEND_RQ;
 
 /**
  * @brief 添加好友回复块
 */
-typedef struct STRU_ADD_FRIEND_RS
-{
+typedef struct STRU_ADD_FRIEND_RS {
     typedef int PackType;
-    STRU_ADD_FRIEND_RS() :type(_DEF_PACK_ADDFRIEND_RS), senderId(0), receiverId(0), result(add_success)
-    {
+    enum Result {
+        ADD_SUCCESS
+    };
+    STRU_ADD_FRIEND_RS()
+        : type(_DEF_PACK_ADDFRIEND_RS)
+        , senderId(0)
+        , receiverId(0)
+        , result(ADD_SUCCESS) {
         memset(senderName, 0, sizeof(senderName));
     }
     /// @brief 数据包类型: _DEF_PACK_ADDFRIEND_RS
@@ -276,10 +284,10 @@ typedef struct STRU_ADD_FRIEND_RS
     /// @brief 接收端id
     int receiverId;
     /// @brief 回复结果
-    int result;
+    Result result;
     /// @brief 发送端Name
     char senderName[_MAX_SIZE];
-}STRU_ADD_FRIEND_RS;
+} STRU_ADD_FRIEND_RS;
 
 typedef struct STRU_GET_USERINFO_RQ {
     typedef int PackType;
@@ -555,42 +563,6 @@ struct STRU_FILE_BLOCK_RS
 // 零拷贝
 // 文件切片（滑动窗口）
 
-/**
- * @brief 文件信息
-*/
-struct FileInfo
-{
-    FileInfo() : nPos(0), nFileSize(0), pFile(nullptr) {
-        memset(szFileId, 0, _MAX_FILE_PATH_SIZE);
-        memset(szFileName, 0, _MAX_FILE_PATH_SIZE);
-        memset(szFilePath, 0, _MAX_FILE_PATH_SIZE);
-    }
-    /**
-     * @brief 文件唯一id
-    */
-    char szFileId[_MAX_FILE_PATH_SIZE];
-    /**
-     * @brief 文件名
-    */
-    char szFileName[_MAX_FILE_PATH_SIZE];
-    /**
-     * @brief 文件所在路径
-    */
-    char szFilePath[_MAX_FILE_PATH_SIZE];
-    /**
-     * @brief 文件已经接受的字节数
-    */
-    uint64_t nPos;
-    /**
-     * @brief 文件大小
-    */
-    uint64_t nFileSize;
-    /**
-     * @brief 文件指针
-    */
-    FILE* pFile;
-};
-
 
 struct STRU_UPDATE_AVATAR_RQ {
     STRU_UPDATE_AVATAR_RQ()
@@ -622,4 +594,26 @@ struct STRU_UPDATE_AVATAR_RS {
     Result result;
     char avatarId[_FILEID_STR_SIZE];
     char uploadPath[_MAX_FILE_PATH_SIZE];
+};
+
+struct STRU_UPDATE_AVATAR_COMPLETE_NOTIFY {
+    enum Result {
+        UPLOADSUCCESS
+    };
+    STRU_UPDATE_AVATAR_COMPLETE_NOTIFY()
+        : type(UPDATE_AVATAR_COMPLETE_NOTIFY)
+        , result(UPLOADSUCCESS)
+        , senderId(0)
+        , fileSize(0) {
+        memset(fileName, 0, _MAX_FILE_PATH_SIZE);
+        memset(fileMd5, 0, _MD5_STR_SIZE);
+        memset(avatarId, 0, _FILEID_STR_SIZE);
+    }
+    PackType type;
+    Result result;
+    int senderId;
+    int fileSize;
+    char fileName[_MAX_FILE_PATH_SIZE];
+    char fileMd5[_MD5_STR_SIZE];
+    char avatarId[_FILEID_STR_SIZE];
 };

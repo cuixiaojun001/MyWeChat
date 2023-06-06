@@ -1,12 +1,12 @@
 #include "receivewidget.h"
 #include "ui_receivewidget.h"
 
-ReceiveWidget::ReceiveWidget(QWidget *parent) :
+ReceiveWidget::ReceiveWidget(QWidget *parent, QString imageUrl) :
     QWidget(parent),
     ui(new Ui::ReceiveWidget)
 {
     ui->setupUi(this);
-    init();
+    init(imageUrl);
 }
 
 ReceiveWidget::~ReceiveWidget()
@@ -19,9 +19,10 @@ void ReceiveWidget::setMessage(QString message)
     ui->msgLbl->setText(message);
 }
 
-void ReceiveWidget::init()
+void ReceiveWidget::init(QString& imageUrl)
 {
     ui->checkBtn->setVisible(false);
+    ui->headBtn->setIcon(QIcon(imageUrl));
     connect(ui->msgLbl, &Label::sizeChanged, this, &ReceiveWidget::sizeChange);
 }
 

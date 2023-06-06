@@ -54,5 +54,8 @@ void ContactWidget::addNewFriend(int id)
 
 void ContactWidget::slot_friendRequestAccepted(int id)
 {
+    // 隐藏该widget
+    m_mapNewFriendItem[id]->hide();
+    m_mapNewFriendItem.erase(id);
     emit SIG_FriendRequestAccept(id);
 }

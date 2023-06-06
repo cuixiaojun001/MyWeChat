@@ -5,6 +5,7 @@
 #include "chatlistwidget.h"
 #include <QDebug>
 #include <QFileDialog>
+#include "Controls/kernel.h"
 
 ChatWidget::ChatWidget(QWidget *parent, int id) :
     QWidget(parent),
@@ -43,7 +44,7 @@ void ChatWidget::setData(Friend *data)
             });
             widget->setMessage(message.getContent());
         } else if (message.getMsgType() == MsgType::Receive) {
-            auto widget = new ReceiveWidget;
+            auto widget = new ReceiveWidget(nullptr, Kernel::GetAvatarUrl());
             ui->listWidget->setItemWidget(item, widget);
             connect(widget, &ReceiveWidget::sizeChanged, [=](QRect rect) mutable {
                 item->setSizeHint(QSize(width() * 3 / 5, rect.height() + 20));

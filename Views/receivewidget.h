@@ -12,7 +12,7 @@ class ReceiveWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit ReceiveWidget(QWidget *parent = nullptr);
+    explicit ReceiveWidget(QWidget *parent = nullptr, QString imageUrl = "");
     ~ReceiveWidget();
 
     void setMessage(QString message);
@@ -23,7 +23,7 @@ signals:
 private:
     Ui::ReceiveWidget *ui;
 
-    void init();
+    void init(QString& imageUrl);
     void sizeChange(QRect rect);
 
 protected:
